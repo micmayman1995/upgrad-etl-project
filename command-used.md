@@ -19,45 +19,41 @@ hdfs dfs -head /user/hadoop/atm_raw/part-m-00000
 >>> from pyspark.sql.functions import *
 >>>
 >>> atm_schema = StructType([
-StructField("year", IntegerType(), True),
-StructField("month", StringType(), True),
-StructField("day", IntegerType(), True),
-StructField("weekday", StringType(), True),
-StructField("hour", IntegerType(), True),
-...
-StructField("atm_status", StringType(), True),
-StructField("atm_id", StringType(), True),
-StructField("atm_manufacturer", StringType(), True),
-StructField("atm_location", StringType(), True),
-StructField("atm_street_name", StringType(), True),
-StructField("atm_street_number", IntegerType(), True),
-StructField("atm_zipcode", IntegerType(), True),
-StructField("atm_lat", DoubleType(), True),
-StructField("atm_lon", DoubleType(), True),
-...
-StructField("currency", StringType(), True),
-StructField("card_type", StringType(), True),
-StructField("transaction_amount", IntegerType(), True),
-StructField("service", StringType(), True),
-...
-StructField("message_code", StringType(), True),
-StructField("message_text", StringType(), True),
-...
-StructField("weather_lat", DoubleType(), True),
-StructField("weather_lon", DoubleType(), True),
-StructField("weather_city_id", IntegerType(), True),
-StructField("weather_city_name", StringType(), True),
-StructField("temp", DoubleType(), True),
-StructField("pressure", IntegerType(), True),
-StructField("humidity", IntegerType(), True),
-StructField("wind_speed", IntegerType(), True),
-StructField("wind_deg", IntegerType(), True),
-StructField("rain_3h", DoubleType(), True),
-StructField("clouds_all", IntegerType(), True),
-StructField("weather_id", IntegerType(), True),
-StructField("weather_main", StringType(), True),
-StructField("weather_description", StringType(), True)
-... ])
+        StructField("year", IntegerType(), True),
+        StructField("month", StringType(), True),
+        StructField("day", IntegerType(), True),
+        StructField("weekday", StringType(), True),
+        StructField("hour", IntegerType(), True),
+        StructField("atm_status", StringType(), True),
+        StructField("atm_id", StringType(), True),
+        StructField("atm_manufacturer", StringType(), True),
+        StructField("atm_location", StringType(), True),
+        StructField("atm_street_name", StringType(), True),
+        StructField("atm_street_number", IntegerType(), True),
+        StructField("atm_zipcode", IntegerType(), True),
+        StructField("atm_lat", DoubleType(), True),
+        StructField("atm_lon", DoubleType(), True),
+        StructField("currency", StringType(), True),
+        StructField("card_type", StringType(), True),
+        StructField("transaction_amount", IntegerType(), True),
+        StructField("service", StringType(), True),
+        StructField("message_code", StringType(), True),
+        StructField("message_text", StringType(), True),
+        StructField("weather_lat", DoubleType(), True),
+        StructField("weather_lon", DoubleType(), True),
+        StructField("weather_city_id", IntegerType(), True),
+        StructField("weather_city_name", StringType(), True),
+        StructField("temp", DoubleType(), True),
+        StructField("pressure", IntegerType(), True),
+        StructField("humidity", IntegerType(), True),
+        StructField("wind_speed", IntegerType(), True),
+        StructField("wind_deg", IntegerType(), True),
+        StructField("rain_3h", DoubleType(), True),
+        StructField("clouds_all", IntegerType(), True),
+        StructField("weather_id", IntegerType(), True),
+        StructField("weather_main", StringType(), True),
+        StructField("weather_description", StringType(), True)
+        ])
 >>> atm_df = spark.read \
 .schema(atm_schema) \
 .csv("hdfs:///user/hadoop/atm_raw")
@@ -80,15 +76,12 @@ col("atm_street_name"),
 col("atm_street_number"),
 col("atm_zipcode"),
 col("atm_lat").alias("lat"),
-col("atm_lon").alias("lon")
-... ).dropDuplicates() \
-...  .withColumn("location_id", monotonically_increasing_id())
+col("atm_lon").alias("lon") ).dropDuplicates() \  .withColumn("location_id", monotonically_increasing_id())
 
 >>> dim_atm_base = atm_df.select(
 "atm_id",
 "atm_manufacturer",
-"atm_location"
-... ).dropDuplicates(["atm_id"])
+"atm_location" ).dropDuplicates(["atm_id"])
 >>> atm_location_lookup = dim_location \
 .select("location_id", "location") \
 .dropDuplicates(["location"])
@@ -114,53 +107,15 @@ concat_ws(" ",
     col("day"),
     col("hour")
 ).alias("full_date_time"),
-"year", "month", "day", "hour", "weekday"
-... ).dropDuplicates() \
-...  .withColumn("date_id", monotonically_increasing_id())
+"year", "month", "day", "hour", "weekday" ).dropDuplicates() \  .withColumn("date_id", monotonically_increasing_id())
 
 >>> dim_card_type = atm_df.select("card_type") \
 .dropDuplicates() \
 .withColumn("card_type_id", monotonically_increasing_id())
 
->>> weather_location_lookup = dim_location \
-...     .select(
-...         "location_id",
-...         "location",
-...         "lat",
-...         "lon"
-...     ) \
-...     .dropDuplicates(["lat", "lon"])
->>> weather_location_lookup = dim_location \
-...     .select("location_id", "lat", "lon") \
-...     .dropDuplicates(["lat", "lon"])
->>> fact_atm_trans = atm_df \
-...     .join(dim_atm, "atm_id") \
-...     .join(dim_card_type, "card_type") \
-...     .join(dim_date, ["year", "month", "day", "hour", "weekday"]) \
-...     .join(
-...         weather_location_lookup,
-...         (atm_df.weather_lat == weather_location_lookup.lat) &
-...         (atm_df.weather_lon == weather_location_lookup.lon),
-...         "left"
-...     ) \
-...     .select(
-...         monotonically_increasing_id().alias("trans_id"),
-...         col("atm_id").cast("int"),
-...         col("location_id").alias("weather_loc_id"),
-...         col("date_id"),
-...         col("card_type_id"),
-...         col("atm_status"),
-...         col("currency"),
-...         col("service"),
-...         col("transaction_amount"),
-...         col("message_code"),
-...         col("message_text"),
-...         col("rain_3h"),
-...         col("clouds_all"),
-...         col("weather_id"),
-...         col("weather_main"),
-...         col("weather_description")
-...     )
+>>> weather_location_lookup = dim_location \     .select(         "location_id",         "location",         "lat",         "lon"     ) \     .dropDuplicates(["lat", "lon"])
+>>> weather_location_lookup = dim_location \     .select("location_id", "lat", "lon") \     .dropDuplicates(["lat", "lon"])
+>>> fact_atm_trans = atm_df \     .join(dim_atm, "atm_id") \     .join(dim_card_type, "card_type") \     .join(dim_date, ["year", "month", "day", "hour", "weekday"]) \     .join(         weather_location_lookup,         (atm_df.weather_lat == weather_location_lookup.lat) &         (atm_df.weather_lon == weather_location_lookup.lon),         "left"     ) \     .select(         monotonically_increasing_id().alias("trans_id"),         col("atm_id").cast("int"),         col("location_id").alias("weather_loc_id"),         col("date_id"),         col("card_type_id"),         col("atm_status"),         col("currency"),         col("service"),         col("transaction_amount"),         col("message_code"),         col("message_text"),         col("rain_3h"),         col("clouds_all"),         col("weather_id"),         col("weather_main"),         col("weather_description")     )
 
 >>> dim_location.write.mode("overwrite").parquet("s3://mike-upgrad-etl-project/dim_location/")
 >>> dim_atm.write.mode("overwrite").parquet("s3://mike-upgrad-etl-project/dim_atm/")
