@@ -7,6 +7,11 @@ atm_df.write \
     .parquet("s3://mike-upgrad-etl-project/raw_mysql_atm/")
 
 
+from pyspark.sql.functions import col
+
+dim_atm_base.filter(
+    col("atm_id").isin(20)
+).show(truncate=False)
 
 Sqoop Import command used for importing table from RDS to HDFS:
 
@@ -124,7 +129,6 @@ concat_ws(" ",
 .dropDuplicates() \
 .withColumn("card_type_id", monotonically_increasing_id())
 
->>> weather_location_lookup = dim_location \     .select(         "location_id",         "location",         "lat",         "lon"     ) \     .dropDuplicates(["lat", "lon"])
 >>> weather_location_lookup = dim_location \     .select("location_id", "lat", "lon") \     .dropDuplicates(["lat", "lon"])
 >>> fact_atm_trans = atm_df \     .join(dim_atm, "atm_id") \     .join(dim_card_type, "card_type") \     .join(dim_date, ["year", "month", "day", "hour", "weekday"]) \     .join(         weather_location_lookup,         (atm_df.weather_lat == weather_location_lookup.lat) &         (atm_df.weather_lon == weather_location_lookup.lon),         "left"     ) \     .select(         monotonically_increasing_id().alias("trans_id"),         col("atm_id").cast("int"),         col("location_id").alias("weather_loc_id"),         col("date_id"),         col("card_type_id"),         col("atm_status"),         col("currency"),         col("service"),         col("transaction_amount"),         col("message_code"),         col("message_text"),         col("rain_3h"),         col("clouds_all"),         col("weather_id"),         col("weather_main"),         col("weather_description")     )
 
