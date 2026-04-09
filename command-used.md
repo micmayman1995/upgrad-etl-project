@@ -1,3 +1,13 @@
+wget https://dev.mysql.com/get/Downloads/Connector-J/mysql-connector-java-5.1.49.tar.gz
+tar -xzf mysql-connector-java-5.1.49.tar.gz
+
+
+atm_df.write \
+    .mode("overwrite") \
+    .parquet("s3://mike-upgrad-etl-project/raw_mysql_atm/")
+
+
+
 Sqoop Import command used for importing table from RDS to HDFS:
 
 sqoop import \
@@ -76,7 +86,8 @@ col("atm_street_name"),
 col("atm_street_number"),
 col("atm_zipcode"),
 col("atm_lat").alias("lat"),
-col("atm_lon").alias("lon") ).dropDuplicates() \  .withColumn("location_id", monotonically_increasing_id())
+col("atm_lon").alias("lon")).dropDuplicates() \
+.withColumn("location_id", monotonically_increasing_id())
 
 >>> dim_atm_base = atm_df.select(
 "atm_id",
@@ -122,6 +133,8 @@ concat_ws(" ",
 >>> dim_date.write.mode("overwrite").parquet("s3://mike-upgrad-etl-project/dim_date/")
 >>> dim_card_type.write.mode("overwrite").parquet("s3://mike-upgrad-etl-project/dim_card_type/")
 >>> fact_atm_trans.write.mode("overwrite").parquet("s3://mike-upgrad-etl-project/fact_atm_trans/")
+
+dim_atm.write.mode("overwrite").parquet("s3://mike-upgrad-etl-project/dim_atm_119/")
 
 >>> dim_location.show(5)
 +-------------+----------------+-----------------+-----------+------+------+-----------+
