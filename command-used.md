@@ -1,6 +1,8 @@
 wget https://dev.mysql.com/get/Downloads/Connector-J/mysql-connector-java-5.1.49.tar.gz
 tar -xzf mysql-connector-java-5.1.49.tar.gz
 
+sudo cp mysql-connector-java-5.1.49/mysql-connector-java-5.1.49-bin.jar /usr/lib/sqoop/lib/
+
 
 atm_df.write \
     .mode("overwrite") \
@@ -30,10 +32,10 @@ hdfs dfs -ls /user/hadoop/atm_raw
 hdfs dfs -head /user/hadoop/atm_raw/part-m-00000
 
 
->>> from pyspark.sql.types import *
->>> from pyspark.sql.functions import *
->>>
->>> atm_schema = StructType([
+from pyspark.sql.types import *
+from pyspark.sql.functions import *
+
+atm_schema = StructType([
         StructField("year", IntegerType(), True),
         StructField("month", StringType(), True),
         StructField("day", IntegerType(), True),
@@ -69,7 +71,7 @@ hdfs dfs -head /user/hadoop/atm_raw/part-m-00000
         StructField("weather_main", StringType(), True),
         StructField("weather_description", StringType(), True)
         ])
->>> atm_df = spark.read \
+atm_df = spark.read \
 .schema(atm_schema) \
 .csv("hdfs:///user/hadoop/atm_raw")
 
@@ -85,7 +87,7 @@ atm_df.show(5, truncate=False)
 +----+-------+---+-------+----+----------+------+----------------+------------+-------------------+-----------------+-----------+-------+-------+--------+----------+------------------+----------+------------+------------+-----------+-----------+---------------+-----------------+------+--------+--------+----------+--------+-------+----------+----------+------------+-----------------------+
 only showing top 5 rows
 
->>> dim_location = atm_df.select(
+dim_location = atm_df.select(
 col("atm_location").alias("location"),
 col("atm_street_name"),
 col("atm_street_number"),
@@ -94,14 +96,16 @@ col("atm_lat").alias("lat"),
 col("atm_lon").alias("lon")).dropDuplicates() \
 .withColumn("location_id", monotonically_increasing_id())
 
->>> dim_atm_base = atm_df.select(
+dim_atm_base = atm_df.select(
 "atm_id",
 "atm_manufacturer",
 "atm_location" ).dropDuplicates(["atm_id"])
->>> atm_location_lookup = dim_location \
+
+atm_location_lookup = dim_location \
 .select("location_id", "location") \
 .dropDuplicates(["location"])
->>> dim_atm = dim_atm_base \
+
+dim_atm = dim_atm_base \
 .join(
     atm_location_lookup,
     dim_atm_base.atm_location == atm_location_lookup.location,
@@ -114,9 +118,9 @@ col("atm_lon").alias("lon")).dropDuplicates() \
     col("location_id").alias("atm_location_id")
 )
 
->>> from pyspark.sql.functions import to_timestamp, concat_ws, lit
+from pyspark.sql.functions import to_timestamp, concat_ws, lit
 >>>
->>> dim_date = atm_df.select(
+dim_date = atm_df.select(
 concat_ws(" ",
     col("year"),
     col("month"),
@@ -125,22 +129,44 @@ concat_ws(" ",
 ).alias("full_date_time"),
 "year", "month", "day", "hour", "weekday" ).dropDuplicates() \  .withColumn("date_id", monotonically_increasing_id())
 
->>> dim_card_type = atm_df.select("card_type") \
+dim_card_type = atm_df.select("card_type") \
 .dropDuplicates() \
 .withColumn("card_type_id", monotonically_increasing_id())
 
->>> weather_location_lookup = dim_location \     .select("location_id", "lat", "lon") \     .dropDuplicates(["lat", "lon"])
->>> fact_atm_trans = atm_df \     .join(dim_atm, "atm_id") \     .join(dim_card_type, "card_type") \     .join(dim_date, ["year", "month", "day", "hour", "weekday"]) \     .join(         weather_location_lookup,         (atm_df.weather_lat == weather_location_lookup.lat) &         (atm_df.weather_lon == weather_location_lookup.lon),         "left"     ) \     .select(         monotonically_increasing_id().alias("trans_id"),         col("atm_id").cast("int"),         col("location_id").alias("weather_loc_id"),         col("date_id"),         col("card_type_id"),         col("atm_status"),         col("currency"),         col("service"),         col("transaction_amount"),         col("message_code"),         col("message_text"),         col("rain_3h"),         col("clouds_all"),         col("weather_id"),         col("weather_main"),         col("weather_description")     )
+weather_location_lookup = dim_location \     .select("location_id", "lat", "lon") \     .dropDuplicates(["lat", "lon"])
+fact_atm_trans = atm_df \     
+.join(dim_atm, "atm_id") \     
+.join(dim_card_type, "card_type") \     
+.join(dim_date, ["year", "month", "day", "hour", "weekday"]) \     
+.join(weather_location_lookup, (atm_df.weather_lat == weather_location_lookup.lat) & (atm_df.weather_lon == weather_location_lookup.lon), "left") \     
+.select(         
+    monotonically_increasing_id().alias("trans_id"),         
+    col("atm_id").cast("int"),         
+    col("location_id").alias("weather_loc_id"),         
+    col("date_id"),         
+    col("card_type_id"),         
+    col("atm_status"),         
+    col("currency"),         
+    col("service"),         
+    col("transaction_amount"),         
+    col("message_code"),         
+    col("message_text"),         
+    col("rain_3h"),         
+    col("clouds_all"),         
+    col("weather_id"),         
+    col("weather_main"),         
+    col("weather_description")     
+    )
 
->>> dim_location.write.mode("overwrite").parquet("s3://mike-upgrad-etl-project/dim_location/")
->>> dim_atm.write.mode("overwrite").parquet("s3://mike-upgrad-etl-project/dim_atm/")
->>> dim_date.write.mode("overwrite").parquet("s3://mike-upgrad-etl-project/dim_date/")
->>> dim_card_type.write.mode("overwrite").parquet("s3://mike-upgrad-etl-project/dim_card_type/")
->>> fact_atm_trans.write.mode("overwrite").parquet("s3://mike-upgrad-etl-project/fact_atm_trans/")
+dim_location.write.mode("overwrite").parquet("s3://mike-upgrad-etl-project/dim_location/")
+dim_atm.write.mode("overwrite").parquet("s3://mike-upgrad-etl-project/dim_atm/")
+dim_date.write.mode("overwrite").parquet("s3://mike-upgrad-etl-project/dim_date/")
+dim_card_type.write.mode("overwrite").parquet("s3://mike-upgrad-etl-project/dim_card_type/")
+fact_atm_trans.write.mode("overwrite").parquet("s3://mike-upgrad-etl-project/fact_atm_trans/")
 
 dim_atm.write.mode("overwrite").parquet("s3://mike-upgrad-etl-project/dim_atm_119/")
 
->>> dim_location.show(5)
+dim_location.show(5)
 +-------------+----------------+-----------------+-----------+------+------+-----------+
 |     location| atm_street_name|atm_street_number|atm_zipcode|   lat|   lon|location_id|
 +-------------+----------------+-----------------+-----------+------+------+-----------+
@@ -152,7 +178,7 @@ dim_atm.write.mode("overwrite").parquet("s3://mike-upgrad-etl-project/dim_atm_11
 +-------------+----------------+-----------------+-----------+------+------+-----------+
 only showing top 5 rows
 
->>> dim_atm.show(5)
+dim_atm.show(5)
 [Stage 69:>                 (0 + 4) / 4][Stage 70:>                 (0 + 0) / 4]
 +------+----------+----------------+---------------+
 |atm_id|atm_number|atm_manufacturer|atm_location_id|
@@ -166,7 +192,7 @@ only showing top 5 rows
 only showing top 5 rows
 
 >>>
->>> dim_date.show(5)
+dim_date.show(5)
 +----------------+----+-----+---+----+---------+-------+
 |  full_date_time|year|month|day|hour|  weekday|date_id|
 +----------------+----+-----+---+----+---------+-------+
@@ -178,7 +204,7 @@ only showing top 5 rows
 +----------------+----+-----+---+----+---------+-------+
 only showing top 5 rows
 
->>> fact_atm_trans.show(5)
+fact_atm_trans.show(5)
 +--------+------+--------------+-------+------------+----------+--------+----------+------------------+------------+------------+-------+----------+----------+------------+-------------------+
 |trans_id|atm_id|weather_loc_id|date_id|card_type_id|atm_status|currency|   service|transaction_amount|message_code|message_text|rain_3h|clouds_all|weather_id|weather_main|weather_description|
 +--------+------+--------------+-------+------------+----------+--------+----------+------------------+------------+------------+-------+----------+----------+------------+-------------------+
@@ -191,17 +217,17 @@ only showing top 5 rows
 only showing top 5 rows
 
 >>>
->>> atm_df.count()
+atm_df.count()
 2468572
->>> fact_atm_trans.count()
+fact_atm_trans.count()
 2468572
->>> fact_atm_trans.count() == atm_df.count()
+fact_atm_trans.count() == atm_df.count()
 True
->>> dim_location.count()
+dim_location.count()
 109
->>> dim_card_type.count()
+dim_card_type.count()
 12
->>> dim_atm.count()
+dim_atm.count()
 113
->>> dim_date.count()
+dim_date.count()
 8685
